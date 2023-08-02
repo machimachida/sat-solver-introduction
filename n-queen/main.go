@@ -13,19 +13,21 @@ const (
 	NUMBER_OF_QUEENS = 8
 )
 
+var (
+	AnswersDoNotWant = [][2]int{
+		// 解として不必要な解を列挙する
+	}
+)
+
 func main() {
 	// 変数を作成する
 	// 行列の各マスにクイーンが置かれているかどうかを表す変数を作成する
-	// 8x8のマス目なので、8x8=64個の変数が必要になる
-	// 1行目の1列目の変数は、11とする
-	// 1行目の2列目の変数は、12とする
-	// 1行目の3列目の変数は、13とする
-	// 1行目の4列目の変数は、14とする
+	// 8x8のマス目だと、8x8=64個の変数が必要になる
 	variables := make([][]int, NUMBER_OF_QUEENS)
 	for i := 0; i < NUMBER_OF_QUEENS; i++ {
 		variables[i] = make([]int, NUMBER_OF_QUEENS)
 		for j := 0; j < NUMBER_OF_QUEENS; j++ {
-			variables[i][j] = i*10 + j + 1 // 負の数が必要になるので、i=0,j=0のとき0にならないよう+1する
+			variables[i][j] = generateVariables(i, j)
 		}
 	}
 
@@ -48,49 +50,67 @@ func main() {
 		columnCNF = append(columnCNF, MakeCNFAtMostOne(column)...)
 	}
 
-	// 3. 斜めには必ず1つのクイーンが置かれている
+	// 3. 左上から右下への斜めには必ず1つのクイーンが置かれている
 	diagonalCNF := make([][]int, 0, NUMBER_OF_QUEENS*(NUMBER_OF_QUEENS-1)/2+1)
-	for i := -NUMBER_OF_QUEENS; i < NUMBER_OF_QUEENS; i++ {
-		for j := 0; j < NUMBER_OF_QUEENS; j++ {
-			diagonal := make([]int, 0, NUMBER_OF_QUEENS)
-			for k := 0; k < NUMBER_OF_QUEENS; k++ {
-				if 0 <= j+i+k && j+i+k < NUMBER_OF_QUEENS {
-					diagonal = append(diagonal, variables[k][j+i+k])
-				}
-			}
-			if len(diagonal) == 0 {
-				continue
-			}
-
-			diagonalCNF = append(diagonalCNF, diagonal) // at least one
-			diagonalCNF = append(diagonalCNF, MakeCNFAtMostOne(diagonal)...)
+	for diff := -NUMBER_OF_QUEENS + 2; diff <= NUMBER_OF_QUEENS-2; diff++ {
+		start := 0
+		if diff < 0 {
+			start = -diff
 		}
+		count := NUMBER_OF_QUEENS - abs(diff)
+		line := make([]int, 0, count)
+		for i := start; i < start+count; i++ {
+			line = append(line, variables[i][i+diff])
+		}
+		diagonalCNF = append(diagonalCNF, MakeCNFAtMostOne(line)...)
 	}
-	fmt.Println(diagonalCNF)
+
+	// 4. 左下から右上への斜めには必ず1つのクイーンが置かれている
+	for diff := -NUMBER_OF_QUEENS + 2; diff <= NUMBER_OF_QUEENS-2; diff++ {
+		start := 0
+		if diff < 0 {
+			start = -diff
+		}
+		count := NUMBER_OF_QUEENS - abs(diff)
+		line := make([]int, 0, count)
+		for i := start; i < start+count; i++ {
+			line = append(line, variables[i][NUMBER_OF_QUEENS-(i+diff+1)])
+		}
+		diagonalCNF = append(diagonalCNF, MakeCNFAtMostOne(line)...)
+	}
 
 	clauses := make([][]int, 0, len(rowCNF)+len(columnCNF)+len(diagonalCNF))
 	clauses = append(clauses, rowCNF...)
 	clauses = append(clauses, columnCNF...)
 	clauses = append(clauses, diagonalCNF...)
 
+	// 解として、AnswersDoNotWantに含まれる解が出ないようにする
+	for _, answer := range AnswersDoNotWant {
+		clauses = append(clauses, []int{-variables[answer[0]][answer[1]]})
+	}
+
 	solver := sat.New()
 	solver.AddFormula(cnf.NewFormulaFromInts(clauses))
 	sat := solver.Solve()
 	if !sat {
-		println("UNSAT")
+		fmt.Println("UNSAT")
 		return
 	}
+
+	queensPoints := make([][2]int, 0, NUMBER_OF_QUEENS)
 	solution := solver.Assignments()
 	for i := 0; i < NUMBER_OF_QUEENS; i++ {
 		for j := 0; j < NUMBER_OF_QUEENS; j++ {
 			if solution[variables[i][j]] {
-				print("Q")
+				fmt.Print("Q")
+				queensPoints = append(queensPoints, [2]int{i, j})
 			} else {
-				print(".")
+				fmt.Print(".")
 			}
 		}
-		println()
+		fmt.Println()
 	}
+	fmt.Println(queensPoints)
 }
 
 func MakeCNFAtMostOne(vals []int) [][]int {
@@ -103,4 +123,20 @@ func MakeCNFAtMostOne(vals []int) [][]int {
 		}
 	}
 	return cnf
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// generateVariables は、行列の各マスにクイーンが置かれているかどうかを表す変数を作成する
+// 1行目の1列目の変数は、11とする
+// 1行目の2列目の変数は、12とする
+// 1行目の3列目の変数は、13とする
+// 1行目の4列目の変数は、14とする
+func generateVariables(row, column int) int {
+	return row*10 + column + 1 // 負の数が必要になるので、i=0,j=0のとき0にならないよう+1する
 }
